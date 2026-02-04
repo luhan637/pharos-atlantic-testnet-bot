@@ -1,0 +1,26 @@
+{
+  "name": "pharos-atlantic-testnet-bot",
+  "version": "1.0.0",
+  "description": "Node.js Bot for PHAROS Atlantic Testnet - Automated tasks",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "keywords": [
+    "pharos",
+    "testnet",
+    "atlantic",
+    "web3",
+    "defi",
+    "bot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ethers": "^6.9.0",
+    "axios": "^1.6.2",
+    "chalk": "^4.1.2",
+    "readline-sync": "^1.4.10"
+  }
+}
