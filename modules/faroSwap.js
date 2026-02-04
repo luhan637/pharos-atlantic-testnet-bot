@@ -1,138 +1,165 @@
 const { ethers } = require('ethers');
 const config = require('../config.json');
+const { loadWallets, getTxParams, getBalance, getTokenBalance } = require('../utils/wallet');
+const { randomDelay } = require('../utils/delay');
 const logger = require('../utils/logger');
-const { getGasPrice } = require('../utils/wallet');
-const { randomFloat } = require('../utils/delay');
-const { FAROSWAP_ROUTER_ABI, ERC20_ABI } = require('../utils/abis');
+const { FARO_ROUTER_ABI, ERC20_ABI } = require('../utils/abis');
 
-const router = config.contracts.faroswap_router;
-const wphrs = config.contracts.wphrs;
-const usdc = config.contracts.usdc;
+const approveToken = async (wallet, tokenAddress, spenderAddress, amount) => {
+    const token = new ethers.Contract(tokenAddress, ERC20_ABI, wallet);
+    const allowance = await token.allowance(wallet.address, spenderAddress);
+    if (allowance < amount) {
+        const tx = await token.approve(spenderAddress, ethers.MaxUint256, getTxParams());
+        await tx.wait();
+        return true;
+    }
+    return false;
+};
 
-async function swapToUsdc(wallet) {
-  const routerContract = new ethers.Contract(router, FAROSWAP_ROUTER_ABI, wallet);
-  
-  try {
-    const amountIn = ethers.parseEther(randomFloat(0.001, 0.005).toString());
-    const path = [wphrs, usdc];
-    const deadline = Math.floor(Date.now() / 1000) + 1800; // 30 minutes
-    
-    logger.info(`[FaroSwap] Swapping ${ethers.formatEther(amountIn)} PHRS to USDC...`);
-    
-    const gasPrice = await getGasPrice();
-    const tx = await routerContract.swapExactETHForTokens(
-      0, // Accept any amount of USDC (slippage = 100%)
-      path,
-      wallet.address,
-      deadline,
-      { value: amountIn, gasPrice }
-    );
-    
-    const receipt = await tx.wait();
-    logger.tx(receipt.hash);
-    logger.success('[FaroSwap] Swap to USDC completed!');
-    
-    return receipt;
-  } catch (error) {
-    logger.error(`[FaroSwap] Swap failed: ${error.message}`);
-    throw error;
-  }
-}
+const swapETHForTokens = async (walletData, tokenAddress, amountETH) => {
+    const { index, wallet, address } = walletData;
+    try {
+        logger.info(index, `Swapping ${amountETH} PHRS for tokens...`);
+        const router = new ethers.Contract(config.contracts.faroRouter, FARO_ROUTER_ABI, wallet);
+        const weth = await router.WETH();
+        
+        const path = [weth, tokenAddress];
+        const deadline = Math.floor(Date.now() / 1000) + 1200;
+        const amountIn = ethers.parseEther(amountETH.toString());
+        
+        const amounts = await router.getAmountsOut(amountIn, path);
+        const minAmountOut = (amounts[1] * 95n) / 100n; // 5% slippage
+        
+        const tx = await router.swapExactETHForTokens(
+            minAmountOut,
+            path,
+            address,
+            deadline,
+            { ...getTxParams(), value: amountIn }
+        );
+        
+        logger.info(index, `TX sent: ${tx.hash}`);
+        const receipt = await tx.wait();
+        
+        if (receipt.status === 1) {
+            logger.success(index, `Swap completed! Received ${ethers.formatUnits(amounts[1], 18)} tokens`);
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Swap failed: ${error.message}`);
+    }
+    return false;
+};
 
-async function swapToPhrs(wallet) {
-  const routerContract = new ethers.Contract(router, FAROSWAP_ROUTER_ABI, wallet);
-  const usdcContract = new ethers.Contract(usdc, ERC20_ABI, wallet);
-  
-  try {
-    const balance = await usdcContract.balanceOf(wallet.address);
-    if (balance === 0n) {
-      logger.warn('[FaroSwap] No USDC balance to swap');
-      return null;
+const swapTokensForETH = async (walletData, tokenAddress, amountToken) => {
+    const { index, wallet, address } = walletData;
+    try {
+        logger.info(index, `Swapping tokens for PHRS...`);
+        const router = new ethers.Contract(config.contracts.faroRouter, FARO_ROUTER_ABI, wallet);
+        const weth = await router.WETH();
+        
+        const amountIn = ethers.parseUnits(amountToken.toString(), 18);
+        await approveToken(wallet, tokenAddress, config.contracts.faroRouter, amountIn);
+        
+        const path = [tokenAddress, weth];
+        const deadline = Math.floor(Date.now() / 1000) + 1200;
+        
+        const amounts = await router.getAmountsOut(amountIn, path);
+        const minAmountOut = (amounts[1] * 95n) / 100n;
+        
+        const tx = await router.swapExactTokensForETH(
+            amountIn,
+            minAmountOut,
+            path,
+            address,
+            deadline,
+            getTxParams()
+        );
+        
+        logger.info(index, `TX sent: ${tx.hash}`);
+        const receipt = await tx.wait();
+        
+        if (receipt.status === 1) {
+            logger.success(index, `Swap completed! Received ${ethers.formatEther(amounts[1])} PHRS`);
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Swap failed: ${error.message}`);
+    }
+    return false;
+};
+
+const addLiquidityETH = async (walletData, tokenAddress, amountToken, amountETH) => {
+    const { index, wallet, address } = walletData;
+    try {
+        logger.info(index, `Adding liquidity...`);
+        const router = new ethers.Contract(config.contracts.faroRouter, FARO_ROUTER_ABI, wallet);
+        
+        const tokenAmount = ethers.parseUnits(amountToken.toString(), 18);
+        const ethAmount = ethers.parseEther(amountETH.toString());
+        
+        await approveToken(wallet, tokenAddress, config.contracts.faroRouter, tokenAmount);
+        
+        const deadline = Math.floor(Date.now() / 1000) + 1200;
+        const minTokenAmount = (tokenAmount * 95n) / 100n;
+        const minEthAmount = (ethAmount * 95n) / 100n;
+        
+        const tx = await router.addLiquidityETH(
+            tokenAddress,
+            tokenAmount,
+            minTokenAmount,
+            minEthAmount,
+            address,
+            deadline,
+            { ...getTxParams(), value: ethAmount }
+        );
+        
+        logger.info(index, `TX sent: ${tx.hash}`);
+        const receipt = await tx.wait();
+        
+        if (receipt.status === 1) {
+            logger.success(index, 'Liquidity added successfully!');
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Add liquidity failed: ${error.message}`);
+    }
+    return false;
+};
+
+const runFaroSwap = async () => {
+    logger.banner('PHAROS FaroSwap Module');
+    const wallets = loadWallets();
+    
+    if (wallets.length === 0) {
+        console.log('No wallets found.');
+        return;
     }
     
-    const amountIn = balance / 2n; // Swap half
-    const path = [usdc, wphrs];
-    const deadline = Math.floor(Date.now() / 1000) + 1800;
+    console.log(`Loaded ${wallets.length} wallet(s)\n`);
     
-    logger.info(`[FaroSwap] Approving USDC...`);
-    const gasPrice = await getGasPrice();
-    const approveTx = await usdcContract.approve(router, amountIn, { gasPrice });
-    await approveTx.wait();
-    
-    logger.info(`[FaroSwap] Swapping USDC to PHRS...`);
-    const tx = await routerContract.swapExactTokensForETH(
-      amountIn,
-      0,
-      path,
-      wallet.address,
-      deadline,
-      { gasPrice }
-    );
-    
-    const receipt = await tx.wait();
-    logger.tx(receipt.hash);
-    logger.success('[FaroSwap] Swap to PHRS completed!');
-    
-    return receipt;
-  } catch (error) {
-    logger.error(`[FaroSwap] Swap failed: ${error.message}`);
-    throw error;
-  }
-}
-
-async function addLiquidity(wallet) {
-  const routerContract = new ethers.Contract(router, FAROSWAP_ROUTER_ABI, wallet);
-  const usdcContract = new ethers.Contract(usdc, ERC20_ABI, wallet);
-  
-  try {
-    const usdcBalance = await usdcContract.balanceOf(wallet.address);
-    if (usdcBalance === 0n) {
-      logger.warn('[FaroSwap] No USDC balance for liquidity');
-      return null;
+    for (const walletData of wallets) {
+        logger.info(walletData.index, `Address: ${walletData.address}`);
+        
+        // Swap 0.001 PHRS for USDC
+        await swapETHForTokens(walletData, config.contracts.usdc, 0.001);
+        await randomDelay();
+        
+        // Add liquidity with small amounts
+        await addLiquidityETH(walletData, config.contracts.usdc, 0.5, 0.0005);
+        await randomDelay();
+        
+        console.log('');
     }
     
-    const amountToken = usdcBalance / 4n;
-    const amountETH = ethers.parseEther(randomFloat(0.001, 0.003).toString());
-    const deadline = Math.floor(Date.now() / 1000) + 1800;
-    
-    logger.info('[FaroSwap] Approving USDC for liquidity...');
-    const gasPrice = await getGasPrice();
-    const approveTx = await usdcContract.approve(router, amountToken, { gasPrice });
-    await approveTx.wait();
-    
-    logger.info('[FaroSwap] Adding liquidity...');
-    const tx = await routerContract.addLiquidityETH(
-      usdc,
-      amountToken,
-      0,
-      0,
-      wallet.address,
-      deadline,
-      { value: amountETH, gasPrice }
-    );
-    
-    const receipt = await tx.wait();
-    logger.tx(receipt.hash);
-    logger.success('[FaroSwap] Liquidity added!');
-    
-    return receipt;
-  } catch (error) {
-    logger.error(`[FaroSwap] Add liquidity failed: ${error.message}`);
-    throw error;
-  }
-}
+    logger.banner('FaroSwap Complete!');
+};
 
-async function run(wallet, action) {
-  switch (action) {
-    case 'swapToUsdc':
-      return await swapToUsdc(wallet);
-    case 'swapToPhrs':
-      return await swapToPhrs(wallet);
-    case 'addLiquidity':
-      return await addLiquidity(wallet);
-    default:
-      return await swapToUsdc(wallet);
-  }
-}
+module.exports = { swapETHForTokens, swapTokensForETH, addLiquidityETH, runFaroSwap };
 
-module.exports = { run, swapToUsdc, swapToPhrs, addLiquidity };
+if (require.main === module) {
+    runFaroSwap().catch(console.error);
+}

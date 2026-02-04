@@ -1,158 +1,160 @@
 const { ethers } = require('ethers');
 const config = require('../config.json');
+const { loadWallets, getTxParams } = require('../utils/wallet');
+const { randomDelay } = require('../utils/delay');
 const logger = require('../utils/logger');
-const { getGasPrice } = require('../utils/wallet');
-const { ZENITH_LENDING_ABI, ERC20_ABI } = require('../utils/abis');
+const { ZENITH_ABI, ERC20_ABI } = require('../utils/abis');
 
-const zenith = config.contracts.zenith_lending;
-const usdc = config.contracts.usdc;
+const approveToken = async (wallet, tokenAddress, spenderAddress, amount) => {
+    const token = new ethers.Contract(tokenAddress, ERC20_ABI, wallet);
+    const allowance = await token.allowance(wallet.address, spenderAddress);
+    if (allowance < amount) {
+        const tx = await token.approve(spenderAddress, ethers.MaxUint256, getTxParams());
+        await tx.wait();
+        return true;
+    }
+    return false;
+};
 
-async function supply(wallet) {
-  const contract = new ethers.Contract(zenith, ZENITH_LENDING_ABI, wallet);
-  const usdcContract = new ethers.Contract(usdc, ERC20_ABI, wallet);
-  
-  try {
-    const balance = await usdcContract.balanceOf(wallet.address);
-    if (balance === 0n) {
-      logger.warn('[Zenith] No USDC balance to supply');
-      return null;
+const supply = async (walletData, tokenAddress, amount) => {
+    const { index, wallet, address } = walletData;
+    try {
+        logger.info(index, `Supplying to Zenith Lending...`);
+        const contract = new ethers.Contract(config.contracts.zenithLending, ZENITH_ABI, wallet);
+        
+        const supplyAmount = ethers.parseUnits(amount.toString(), 18);
+        await approveToken(wallet, tokenAddress, config.contracts.zenithLending, supplyAmount);
+        
+        const tx = await contract.supply(tokenAddress, supplyAmount, getTxParams());
+        logger.info(index, `TX sent: ${tx.hash}`);
+        
+        const receipt = await tx.wait();
+        if (receipt.status === 1) {
+            logger.success(index, `Supplied ${amount} tokens to Zenith!`);
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Supply failed: ${error.message}`);
+    }
+    return false;
+};
+
+const borrow = async (walletData, tokenAddress, amount) => {
+    const { index, wallet, address } = walletData;
+    try {
+        logger.info(index, `Borrowing from Zenith Lending...`);
+        const contract = new ethers.Contract(config.contracts.zenithLending, ZENITH_ABI, wallet);
+        
+        // Check health factor first
+        const healthFactor = await contract.getHealthFactor(address);
+        if (healthFactor < ethers.parseEther('1.1')) {
+            logger.warning(index, 'Health factor too low to borrow');
+            return false;
+        }
+        
+        const borrowAmount = ethers.parseUnits(amount.toString(), 18);
+        
+        const tx = await contract.borrow(tokenAddress, borrowAmount, getTxParams());
+        logger.info(index, `TX sent: ${tx.hash}`);
+        
+        const receipt = await tx.wait();
+        if (receipt.status === 1) {
+            logger.success(index, `Borrowed ${amount} tokens from Zenith!`);
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Borrow failed: ${error.message}`);
+    }
+    return false;
+};
+
+const repay = async (walletData, tokenAddress, amount) => {
+    const { index, wallet, address } = walletData;
+    try {
+        logger.info(index, `Repaying to Zenith Lending...`);
+        const contract = new ethers.Contract(config.contracts.zenithLending, ZENITH_ABI, wallet);
+        
+        const repayAmount = ethers.parseUnits(amount.toString(), 18);
+        await approveToken(wallet, tokenAddress, config.contracts.zenithLending, repayAmount);
+        
+        const tx = await contract.repay(tokenAddress, repayAmount, getTxParams());
+        logger.info(index, `TX sent: ${tx.hash}`);
+        
+        const receipt = await tx.wait();
+        if (receipt.status === 1) {
+            logger.success(index, `Repaid ${amount} tokens to Zenith!`);
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Repay failed: ${error.message}`);
+    }
+    return false;
+};
+
+const withdraw = async (walletData, tokenAddress, amount) => {
+    const { index, wallet, address } = walletData;
+    try {
+        logger.info(index, `Withdrawing from Zenith Lending...`);
+        const contract = new ethers.Contract(config.contracts.zenithLending, ZENITH_ABI, wallet);
+        
+        const withdrawAmount = ethers.parseUnits(amount.toString(), 18);
+        
+        const tx = await contract.withdraw(tokenAddress, withdrawAmount, getTxParams());
+        logger.info(index, `TX sent: ${tx.hash}`);
+        
+        const receipt = await tx.wait();
+        if (receipt.status === 1) {
+            logger.success(index, `Withdrew ${amount} tokens from Zenith!`);
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Withdraw failed: ${error.message}`);
+    }
+    return false;
+};
+
+const runZenithLending = async () => {
+    logger.banner('PHAROS Zenith Lending Module');
+    const wallets = loadWallets();
+    
+    if (wallets.length === 0) {
+        console.log('No wallets found.');
+        return;
     }
     
-    const amount = balance / 10n;
+    console.log(`Loaded ${wallets.length} wallet(s)\n`);
     
-    logger.info('[Zenith] Approving USDC...');
-    const gasPrice = await getGasPrice();
-    const approveTx = await usdcContract.approve(zenith, amount, { gasPrice });
-    await approveTx.wait();
-    
-    logger.info('[Zenith] Supplying USDC...');
-    const tx = await contract.supply(usdc, amount, { gasPrice });
-    
-    const receipt = await tx.wait();
-    logger.tx(receipt.hash);
-    logger.success('[Zenith] Supply completed!');
-    
-    return receipt;
-  } catch (error) {
-    logger.error(`[Zenith] Supply failed: ${error.message}`);
-    throw error;
-  }
-}
-
-async function borrow(wallet) {
-  const contract = new ethers.Contract(zenith, ZENITH_LENDING_ABI, wallet);
-  
-  try {
-    // Get user account data to check available borrow
-    const accountData = await contract.getUserAccountData(wallet.address);
-    const availableBorrow = accountData.availableBorrow || accountData[2];
-    
-    if (availableBorrow === 0n) {
-      logger.warn('[Zenith] No available borrow amount');
-      return null;
+    for (const walletData of wallets) {
+        logger.info(walletData.index, `Address: ${walletData.address}`);
+        
+        // Supply USDC
+        await supply(walletData, config.contracts.usdc, 1);
+        await randomDelay();
+        
+        // Borrow small amount
+        await borrow(walletData, config.contracts.usdt, 0.5);
+        await randomDelay();
+        
+        // Repay
+        await repay(walletData, config.contracts.usdt, 0.5);
+        await randomDelay();
+        
+        // Withdraw
+        await withdraw(walletData, config.contracts.usdc, 0.5);
+        await randomDelay();
+        
+        console.log('');
     }
     
-    const borrowAmount = availableBorrow / 2n; // Borrow half of available
-    
-    logger.info(`[Zenith] Borrowing USDC...`);
-    const gasPrice = await getGasPrice();
-    const tx = await contract.borrow(usdc, borrowAmount, { gasPrice });
-    
-    const receipt = await tx.wait();
-    logger.tx(receipt.hash);
-    logger.success('[Zenith] Borrow completed!');
-    
-    return receipt;
-  } catch (error) {
-    logger.error(`[Zenith] Borrow failed: ${error.message}`);
-    throw error;
-  }
-}
+    logger.banner('Zenith Lending Complete!');
+};
 
-async function repay(wallet) {
-  const contract = new ethers.Contract(zenith, ZENITH_LENDING_ABI, wallet);
-  const usdcContract = new ethers.Contract(usdc, ERC20_ABI, wallet);
-  
-  try {
-    const balance = await usdcContract.balanceOf(wallet.address);
-    if (balance === 0n) {
-      logger.warn('[Zenith] No USDC balance to repay');
-      return null;
-    }
-    
-    // Get user debt
-    const accountData = await contract.getUserAccountData(wallet.address);
-    const totalDebt = accountData.totalDebt || accountData[1];
-    
-    if (totalDebt === 0n) {
-      logger.warn('[Zenith] No debt to repay');
-      return null;
-    }
-    
-    const repayAmount = balance < totalDebt ? balance : totalDebt;
-    
-    logger.info('[Zenith] Approving USDC...');
-    const gasPrice = await getGasPrice();
-    const approveTx = await usdcContract.approve(zenith, repayAmount, { gasPrice });
-    await approveTx.wait();
-    
-    logger.info('[Zenith] Repaying USDC...');
-    const tx = await contract.repay(usdc, repayAmount, { gasPrice });
-    
-    const receipt = await tx.wait();
-    logger.tx(receipt.hash);
-    logger.success('[Zenith] Repay completed!');
-    
-    return receipt;
-  } catch (error) {
-    logger.error(`[Zenith] Repay failed: ${error.message}`);
-    throw error;
-  }
-}
+module.exports = { supply, borrow, repay, withdraw, runZenithLending };
 
-async function withdraw(wallet) {
-  const contract = new ethers.Contract(zenith, ZENITH_LENDING_ABI, wallet);
-  
-  try {
-    // Get user account data to check collateral
-    const accountData = await contract.getUserAccountData(wallet.address);
-    const totalCollateral = accountData.totalCollateral || accountData[0];
-    
-    if (totalCollateral === 0n) {
-      logger.warn('[Zenith] No collateral to withdraw');
-      return null;
-    }
-    
-    const withdrawAmount = totalCollateral / 4n; // Withdraw 25%
-    
-    logger.info('[Zenith] Withdrawing USDC...');
-    const gasPrice = await getGasPrice();
-    const tx = await contract.withdraw(usdc, withdrawAmount, { gasPrice });
-    
-    const receipt = await tx.wait();
-    logger.tx(receipt.hash);
-    logger.success('[Zenith] Withdraw completed!');
-    
-    return receipt;
-  } catch (error) {
-    logger.error(`[Zenith] Withdraw failed: ${error.message}`);
-    throw error;
-  }
+if (require.main === module) {
+    runZenithLending().catch(console.error);
 }
-
-async function run(wallet, action) {
-  switch (action) {
-    case 'supply':
-      return await supply(wallet);
-    case 'borrow':
-      return await borrow(wallet);
-    case 'repay':
-      return await repay(wallet);
-    case 'withdraw':
-      return await withdraw(wallet);
-    default:
-      return await supply(wallet);
-  }
-}
-
-module.exports = { run, supply, borrow, repay, withdraw };

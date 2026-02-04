@@ -1,26 +1,25 @@
 {
   "name": "pharos-atlantic-testnet-bot",
   "version": "1.0.0",
-  "description": "Node.js Bot for PHAROS Atlantic Testnet - Automated tasks",
+  "description": "Node.js bot for PHAROS Atlantic Testnet - Daily GM, Mint NFT, FaroSwap, Bitverse, Aquaflux, Asseto, Zenith Lending, Transfer modules",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node index.js"
+    "gm": "node modules/dailyGm.js",
+    "mint": "node modules/mintNft.js",
+    "swap": "node modules/faroSwap.js",
+    "bitverse": "node modules/bitverse.js",
+    "aquaflux": "node modules/aquaflux.js",
+    "asseto": "node modules/asseto.js",
+    "zenith": "node modules/zenithLending.js",
+    "transfer": "node modules/transfer.js"
   },
-  "keywords": [
-    "pharos",
-    "testnet",
-    "atlantic",
-    "web3",
-    "defi",
-    "bot"
-  ],
-  "author": "",
-  "license": "MIT",
   "dependencies": {
     "ethers": "^6.9.0",
-    "axios": "^1.6.2",
     "chalk": "^4.1.2",
-    "readline-sync": "^1.4.10"
-  }
+    "readline-sync": "^1.4.10",
+    "figlet": "^1.7.0"
+  },
+  "author": "",
+  "license": "MIT"
 }

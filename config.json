@@ -3,25 +3,25 @@
     "url": "https://testnet.dplabs-internal.com",
     "chainId": 688688
   },
-  "explorer": "https://testnet.pharosscan.xyz",
   "contracts": {
-    "onchaingm": "0xbfD69a555F3e3A721B37e824A06ea1B264FC8694",
-    "surflayer": "0x0A7da0b01148b6d5B0f36fCe6A35c46b5A6C12d6",
-    "grandline_nft": "0x32a86dA5e86F62cB804d0BF8eBA5fFb2A4c35A69",
-    "faroswap_router": "0x1a4de519154Ae51200b0ad7c90F7faC75547888a",
-    "faroswap_factory": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-    "bitverse_router": "0x8C4973C6C26f6E7C2ff21a3F84C1e42884e3Bc30",
-    "aquaflux": "0x62A857C6Ce01859F8f0E8BcA9f4E1EE7b7ECb7D2",
-    "asseto": "0x3A9E7f1D8eF1B3fF0D2B6Ae2CE9f4C8e7E0d1A2B",
-    "zenith_lending": "0x7D5f3fC9b1D2E0f8A3B6C4E5F2A1D8C7B0E9F3A4",
-    "usdc": "0xAD902CF99C2dE2f1Ba5ec4D642Fd7E49cae9EE37",
-    "usdt": "0x4dFA6591bfd71f50f9b61a3F4a2F4E8f6F8E3B0C",
-    "wphrs": "0x76aaDA7EA08bB83410A68f95E5F9e5117BeF0D1d",
-    "phrs_usdc_lp": "0xc32E68c679e6C0d9aB57B8b8e77E8A2e3f92e5C0"
+    "onchaingm": "0x59cfb4d5F0a9A4E05E1dB5e500dB9d84ece30F2B",
+    "surflayer": "0x2d8c0b06dC5A73D5a49F98ceA012f18c536D6Fc7",
+    "grandline": "0x8c47E5E9D65ADee05FA63A87d7949F90d91E1eA2",
+    "faroRouter": "0x1a4de519154ae51200b0ad7c90f7fac75547888a",
+    "faroFactory": "0x5bae6744d9f5a95e17e95b3b32e2b7f8e93a54d6",
+    "bitverse": "0xb86ea3dFC3F1C5C1E3E7dD38B12A27a2b7A9F9c2",
+    "aquaflux": "0x4c7A5F7d4cB3C7a8F9c3B6dE2F1a8bC5E9d6A7f2",
+    "asseto": "0x3d7bA8C9E2f1D4a6B8c3E5F7A9d2C4e6B8a1D3f5",
+    "zenithLending": "0x9c8E3F5a7B2d1C6e4A8f9D3b5C7a2E6F4d8B1a3c",
+    "wphrs": "0x76aaaDA469D23216bE5f7C596fA25F282fF9b364",
+    "usdc": "0xad902cf99c2de2f1ba5ec4d642fd7e49c6389bc3",
+    "usdt": "0xed59de2d7ad9c043442e381231ee3646fc3c2939"
   },
   "settings": {
-    "minDelay": 3000,
-    "maxDelay": 8000,
-    "gasMultiplier": 1.2
+    "delayMin": 5000,
+    "delayMax": 15000,
+    "gasLimit": 500000,
+    "maxFeePerGas": "1500000000",
+    "maxPriorityFeePerGas": "1500000000"
   }
 }

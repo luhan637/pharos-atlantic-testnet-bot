@@ -1,110 +1,119 @@
 const { ethers } = require('ethers');
 const config = require('../config.json');
+const { loadWallets, getTxParams } = require('../utils/wallet');
+const { randomDelay } = require('../utils/delay');
 const logger = require('../utils/logger');
-const { getGasPrice } = require('../utils/wallet');
-const { randomInt } = require('../utils/delay');
 const { ASSETO_ABI, ERC20_ABI } = require('../utils/abis');
 
-const asseto = config.contracts.asseto;
-const usdc = config.contracts.usdc;
+const approveToken = async (wallet, tokenAddress, spenderAddress, amount) => {
+    const token = new ethers.Contract(tokenAddress, ERC20_ABI, wallet);
+    const allowance = await token.allowance(wallet.address, spenderAddress);
+    if (allowance < amount) {
+        const tx = await token.approve(spenderAddress, ethers.MaxUint256, getTxParams());
+        await tx.wait();
+        return true;
+    }
+    return false;
+};
 
-async function deposit(wallet) {
-  const contract = new ethers.Contract(asseto, ASSETO_ABI, wallet);
-  const usdcContract = new ethers.Contract(usdc, ERC20_ABI, wallet);
-  
-  try {
-    const balance = await usdcContract.balanceOf(wallet.address);
-    if (balance === 0n) {
-      logger.warn('[Asseto] No USDC balance to deposit');
-      return null;
+const assetoDeposit = async (walletData, tokenAddress, amount) => {
+    const { index, wallet, address } = walletData;
+    try {
+        logger.info(index, `Depositing to Asseto...`);
+        const contract = new ethers.Contract(config.contracts.asseto, ASSETO_ABI, wallet);
+        
+        const depositAmount = ethers.parseUnits(amount.toString(), 18);
+        await approveToken(wallet, tokenAddress, config.contracts.asseto, depositAmount);
+        
+        const tx = await contract.deposit(tokenAddress, depositAmount, getTxParams());
+        logger.info(index, `TX sent: ${tx.hash}`);
+        
+        const receipt = await tx.wait();
+        if (receipt.status === 1) {
+            logger.success(index, `Deposited ${amount} tokens to Asseto!`);
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Asseto deposit failed: ${error.message}`);
+    }
+    return false;
+};
+
+const subscribe = async (walletData, planId, amount) => {
+    const { index, wallet, address } = walletData;
+    try {
+        logger.info(index, `Subscribing to plan #${planId}...`);
+        const contract = new ethers.Contract(config.contracts.asseto, ASSETO_ABI, wallet);
+        
+        const subscribeAmount = ethers.parseUnits(amount.toString(), 18);
+        
+        const tx = await contract.subscribe(planId, subscribeAmount, getTxParams());
+        logger.info(index, `TX sent: ${tx.hash}`);
+        
+        const receipt = await tx.wait();
+        if (receipt.status === 1) {
+            logger.success(index, `Subscribed to plan #${planId} with ${amount} tokens!`);
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Subscribe failed: ${error.message}`);
+    }
+    return false;
+};
+
+const redeem = async (walletData, subscriptionId) => {
+    const { index, wallet } = walletData;
+    try {
+        logger.info(index, `Redeeming subscription #${subscriptionId}...`);
+        const contract = new ethers.Contract(config.contracts.asseto, ASSETO_ABI, wallet);
+        
+        const tx = await contract.redeem(subscriptionId, getTxParams());
+        logger.info(index, `TX sent: ${tx.hash}`);
+        
+        const receipt = await tx.wait();
+        if (receipt.status === 1) {
+            logger.success(index, `Subscription #${subscriptionId} redeemed!`);
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Redeem failed: ${error.message}`);
+    }
+    return false;
+};
+
+const runAsseto = async () => {
+    logger.banner('PHAROS Asseto Module');
+    const wallets = loadWallets();
+    
+    if (wallets.length === 0) {
+        console.log('No wallets found.');
+        return;
     }
     
-    const amount = balance / 10n;
+    console.log(`Loaded ${wallets.length} wallet(s)\n`);
     
-    logger.info('[Asseto] Approving USDC...');
-    const gasPrice = await getGasPrice();
-    const approveTx = await usdcContract.approve(asseto, amount, { gasPrice });
-    await approveTx.wait();
-    
-    logger.info('[Asseto] Depositing USDC...');
-    const tx = await contract.deposit(usdc, amount, { gasPrice });
-    
-    const receipt = await tx.wait();
-    logger.tx(receipt.hash);
-    logger.success('[Asseto] Deposit completed!');
-    
-    return receipt;
-  } catch (error) {
-    logger.error(`[Asseto] Deposit failed: ${error.message}`);
-    throw error;
-  }
-}
-
-async function subscribe(wallet) {
-  const contract = new ethers.Contract(asseto, ASSETO_ABI, wallet);
-  const usdcContract = new ethers.Contract(usdc, ERC20_ABI, wallet);
-  
-  try {
-    const balance = await usdcContract.balanceOf(wallet.address);
-    if (balance === 0n) {
-      logger.warn('[Asseto] No USDC balance to subscribe');
-      return null;
+    for (const walletData of wallets) {
+        logger.info(walletData.index, `Address: ${walletData.address}`);
+        
+        // Deposit USDC
+        await assetoDeposit(walletData, config.contracts.usdc, 1);
+        await randomDelay();
+        
+        // Subscribe to plan 1
+        await subscribe(walletData, 1, 0.5);
+        await randomDelay();
+        
+        console.log('');
     }
     
-    const amount = balance / 10n;
-    const planId = randomInt(1, 3); // Random plan 1-3
-    
-    logger.info('[Asseto] Approving USDC...');
-    const gasPrice = await getGasPrice();
-    const approveTx = await usdcContract.approve(asseto, amount, { gasPrice });
-    await approveTx.wait();
-    
-    logger.info(`[Asseto] Subscribing to plan ${planId}...`);
-    const tx = await contract.subscribe(planId, amount, { gasPrice });
-    
-    const receipt = await tx.wait();
-    logger.tx(receipt.hash);
-    logger.success('[Asseto] Subscription completed!');
-    
-    return receipt;
-  } catch (error) {
-    logger.error(`[Asseto] Subscribe failed: ${error.message}`);
-    throw error;
-  }
-}
+    logger.banner('Asseto Complete!');
+};
 
-async function requestRedemption(wallet) {
-  const contract = new ethers.Contract(asseto, ASSETO_ABI, wallet);
-  
-  try {
-    const subscriptionId = 1; // Default subscription ID
-    
-    logger.info('[Asseto] Requesting redemption...');
-    const gasPrice = await getGasPrice();
-    const tx = await contract.requestRedemption(subscriptionId, { gasPrice });
-    
-    const receipt = await tx.wait();
-    logger.tx(receipt.hash);
-    logger.success('[Asseto] Redemption requested!');
-    
-    return receipt;
-  } catch (error) {
-    logger.error(`[Asseto] Redemption failed: ${error.message}`);
-    throw error;
-  }
-}
+module.exports = { assetoDeposit, subscribe, redeem, runAsseto };
 
-async function run(wallet, action) {
-  switch (action) {
-    case 'deposit':
-      return await deposit(wallet);
-    case 'subscribe':
-      return await subscribe(wallet);
-    case 'redemption':
-      return await requestRedemption(wallet);
-    default:
-      return await deposit(wallet);
-  }
+if (require.main === module) {
+    runAsseto().catch(console.error);
 }
-
-module.exports = { run, deposit, subscribe, requestRedemption };

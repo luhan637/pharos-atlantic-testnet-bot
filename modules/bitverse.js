@@ -1,157 +1,150 @@
 const { ethers } = require('ethers');
 const config = require('../config.json');
+const { loadWallets, getTxParams, getBalance } = require('../utils/wallet');
+const { randomDelay } = require('../utils/delay');
 const logger = require('../utils/logger');
-const { getGasPrice } = require('../utils/wallet');
-const { randomFloat } = require('../utils/delay');
-const { BITVERSE_ROUTER_ABI, ERC20_ABI } = require('../utils/abis');
+const { BITVERSE_ABI, ERC20_ABI } = require('../utils/abis');
 
-const router = config.contracts.bitverse_router;
-const usdc = config.contracts.usdc;
-const wphrs = config.contracts.wphrs;
+const approveToken = async (wallet, tokenAddress, spenderAddress, amount) => {
+    const token = new ethers.Contract(tokenAddress, ERC20_ABI, wallet);
+    const allowance = await token.allowance(wallet.address, spenderAddress);
+    if (allowance < amount) {
+        const tx = await token.approve(spenderAddress, ethers.MaxUint256, getTxParams());
+        await tx.wait();
+        return true;
+    }
+    return false;
+};
 
-async function swap(wallet) {
-  const routerContract = new ethers.Contract(router, BITVERSE_ROUTER_ABI, wallet);
-  const usdcContract = new ethers.Contract(usdc, ERC20_ABI, wallet);
-  
-  try {
-    const balance = await usdcContract.balanceOf(wallet.address);
-    if (balance === 0n) {
-      logger.warn('[Bitverse] No USDC balance to swap');
-      return null;
+const bitverseSwap = async (walletData, tokenIn, tokenOut, amountIn) => {
+    const { index, wallet, address } = walletData;
+    try {
+        logger.info(index, 'Performing Bitverse swap...');
+        const contract = new ethers.Contract(config.contracts.bitverse, BITVERSE_ABI, wallet);
+        
+        const amount = ethers.parseUnits(amountIn.toString(), 18);
+        await approveToken(wallet, tokenIn, config.contracts.bitverse, amount);
+        
+        const minAmountOut = (amount * 95n) / 100n; // 5% slippage
+        
+        const tx = await contract.swap(tokenIn, tokenOut, amount, minAmountOut, getTxParams());
+        logger.info(index, `TX sent: ${tx.hash}`);
+        
+        const receipt = await tx.wait();
+        if (receipt.status === 1) {
+            logger.success(index, 'Bitverse swap completed!');
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Bitverse swap failed: ${error.message}`);
+    }
+    return false;
+};
+
+const bitverseDeposit = async (walletData, tokenAddress, amount) => {
+    const { index, wallet, address } = walletData;
+    try {
+        logger.info(index, 'Depositing to Bitverse...');
+        const contract = new ethers.Contract(config.contracts.bitverse, BITVERSE_ABI, wallet);
+        
+        const depositAmount = ethers.parseUnits(amount.toString(), 18);
+        await approveToken(wallet, tokenAddress, config.contracts.bitverse, depositAmount);
+        
+        const tx = await contract.deposit(tokenAddress, depositAmount, getTxParams());
+        logger.info(index, `TX sent: ${tx.hash}`);
+        
+        const receipt = await tx.wait();
+        if (receipt.status === 1) {
+            logger.success(index, `Deposited ${amount} tokens to Bitverse!`);
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Bitverse deposit failed: ${error.message}`);
+    }
+    return false;
+};
+
+const openPosition = async (walletData, tokenAddress, amount, isLong, leverage) => {
+    const { index, wallet, address } = walletData;
+    try {
+        const positionType = isLong ? 'LONG' : 'SHORT';
+        logger.info(index, `Opening ${positionType} position with ${leverage}x leverage...`);
+        const contract = new ethers.Contract(config.contracts.bitverse, BITVERSE_ABI, wallet);
+        
+        const positionAmount = ethers.parseUnits(amount.toString(), 18);
+        
+        const tx = await contract.openPosition(tokenAddress, positionAmount, isLong, leverage, getTxParams());
+        logger.info(index, `TX sent: ${tx.hash}`);
+        
+        const receipt = await tx.wait();
+        if (receipt.status === 1) {
+            logger.success(index, `${positionType} position opened!`);
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Open position failed: ${error.message}`);
+    }
+    return false;
+};
+
+const closePosition = async (walletData, positionId) => {
+    const { index, wallet } = walletData;
+    try {
+        logger.info(index, `Closing position #${positionId}...`);
+        const contract = new ethers.Contract(config.contracts.bitverse, BITVERSE_ABI, wallet);
+        
+        const tx = await contract.closePosition(positionId, getTxParams());
+        logger.info(index, `TX sent: ${tx.hash}`);
+        
+        const receipt = await tx.wait();
+        if (receipt.status === 1) {
+            logger.success(index, `Position #${positionId} closed!`);
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Close position failed: ${error.message}`);
+    }
+    return false;
+};
+
+const runBitverse = async () => {
+    logger.banner('PHAROS Bitverse Module');
+    const wallets = loadWallets();
+    
+    if (wallets.length === 0) {
+        console.log('No wallets found.');
+        return;
     }
     
-    const amountIn = balance / 10n;
+    console.log(`Loaded ${wallets.length} wallet(s)\n`);
     
-    logger.info('[Bitverse] Approving USDC...');
-    const gasPrice = await getGasPrice();
-    const approveTx = await usdcContract.approve(router, amountIn, { gasPrice });
-    await approveTx.wait();
-    
-    logger.info(`[Bitverse] Swapping USDC to WPHRS...`);
-    const tx = await routerContract.swap(usdc, wphrs, amountIn, 0, { gasPrice });
-    
-    const receipt = await tx.wait();
-    logger.tx(receipt.hash);
-    logger.success('[Bitverse] Swap completed!');
-    
-    return receipt;
-  } catch (error) {
-    logger.error(`[Bitverse] Swap failed: ${error.message}`);
-    throw error;
-  }
-}
-
-async function deposit(wallet) {
-  const routerContract = new ethers.Contract(router, BITVERSE_ROUTER_ABI, wallet);
-  const usdcContract = new ethers.Contract(usdc, ERC20_ABI, wallet);
-  
-  try {
-    const balance = await usdcContract.balanceOf(wallet.address);
-    if (balance === 0n) {
-      logger.warn('[Bitverse] No USDC balance to deposit');
-      return null;
+    for (const walletData of wallets) {
+        logger.info(walletData.index, `Address: ${walletData.address}`);
+        
+        // Deposit USDC
+        await bitverseDeposit(walletData, config.contracts.usdc, 1);
+        await randomDelay();
+        
+        // Open long position
+        await openPosition(walletData, config.contracts.wphrs, 0.5, true, 2);
+        await randomDelay();
+        
+        // Open short position
+        await openPosition(walletData, config.contracts.wphrs, 0.5, false, 2);
+        await randomDelay();
+        
+        console.log('');
     }
     
-    const amountIn = balance / 10n;
-    
-    logger.info('[Bitverse] Approving USDC for deposit...');
-    const gasPrice = await getGasPrice();
-    const approveTx = await usdcContract.approve(router, amountIn, { gasPrice });
-    await approveTx.wait();
-    
-    logger.info(`[Bitverse] Depositing USDC...`);
-    const tx = await routerContract.deposit(usdc, amountIn, { gasPrice });
-    
-    const receipt = await tx.wait();
-    logger.tx(receipt.hash);
-    logger.success('[Bitverse] Deposit completed!');
-    
-    return receipt;
-  } catch (error) {
-    logger.error(`[Bitverse] Deposit failed: ${error.message}`);
-    throw error;
-  }
-}
+    logger.banner('Bitverse Complete!');
+};
 
-async function openLong(wallet) {
-  const routerContract = new ethers.Contract(router, BITVERSE_ROUTER_ABI, wallet);
-  const usdcContract = new ethers.Contract(usdc, ERC20_ABI, wallet);
-  
-  try {
-    const balance = await usdcContract.balanceOf(wallet.address);
-    if (balance === 0n) {
-      logger.warn('[Bitverse] No USDC balance for long position');
-      return null;
-    }
-    
-    const collateral = balance / 20n;
-    const leverage = 2; // 2x leverage
-    
-    logger.info('[Bitverse] Approving USDC for long position...');
-    const gasPrice = await getGasPrice();
-    const approveTx = await usdcContract.approve(router, collateral, { gasPrice });
-    await approveTx.wait();
-    
-    logger.info(`[Bitverse] Opening long position...`);
-    const tx = await routerContract.openPosition(true, wphrs, collateral, leverage, { gasPrice });
-    
-    const receipt = await tx.wait();
-    logger.tx(receipt.hash);
-    logger.success('[Bitverse] Long position opened!');
-    
-    return receipt;
-  } catch (error) {
-    logger.error(`[Bitverse] Long position failed: ${error.message}`);
-    throw error;
-  }
-}
+module.exports = { bitverseSwap, bitverseDeposit, openPosition, closePosition, runBitverse };
 
-async function openShort(wallet) {
-  const routerContract = new ethers.Contract(router, BITVERSE_ROUTER_ABI, wallet);
-  const usdcContract = new ethers.Contract(usdc, ERC20_ABI, wallet);
-  
-  try {
-    const balance = await usdcContract.balanceOf(wallet.address);
-    if (balance === 0n) {
-      logger.warn('[Bitverse] No USDC balance for short position');
-      return null;
-    }
-    
-    const collateral = balance / 20n;
-    const leverage = 2;
-    
-    logger.info('[Bitverse] Approving USDC for short position...');
-    const gasPrice = await getGasPrice();
-    const approveTx = await usdcContract.approve(router, collateral, { gasPrice });
-    await approveTx.wait();
-    
-    logger.info(`[Bitverse] Opening short position...`);
-    const tx = await routerContract.openPosition(false, wphrs, collateral, leverage, { gasPrice });
-    
-    const receipt = await tx.wait();
-    logger.tx(receipt.hash);
-    logger.success('[Bitverse] Short position opened!');
-    
-    return receipt;
-  } catch (error) {
-    logger.error(`[Bitverse] Short position failed: ${error.message}`);
-    throw error;
-  }
+if (require.main === module) {
+    runBitverse().catch(console.error);
 }
-
-async function run(wallet, action) {
-  switch (action) {
-    case 'swap':
-      return await swap(wallet);
-    case 'deposit':
-      return await deposit(wallet);
-    case 'long':
-      return await openLong(wallet);
-    case 'short':
-      return await openShort(wallet);
-    default:
-      return await swap(wallet);
-  }
-}
-
-module.exports = { run, swap, deposit, openLong, openShort };

@@ -1,87 +1,147 @@
 const { ethers } = require('ethers');
 const config = require('../config.json');
+const { loadWallets, getTxParams, getBalance } = require('../utils/wallet');
+const { randomDelay } = require('../utils/delay');
 const logger = require('../utils/logger');
-const { getGasPrice } = require('../utils/wallet');
-const { randomFloat, randomInt } = require('../utils/delay');
-const { AQUAFLUX_ABI, ERC20_ABI } = require('../utils/abis');
+const { AQUAFLUX_ABI } = require('../utils/abis');
 
-const aquaflux = config.contracts.aquaflux;
-const usdc = config.contracts.usdc;
+const createStructure = async (walletData, amount, durationDays) => {
+    const { index, wallet, address } = walletData;
+    try {
+        logger.info(index, `Creating Aquaflux structure for ${durationDays} days...`);
+        const contract = new ethers.Contract(config.contracts.aquaflux, AQUAFLUX_ABI, wallet);
+        
+        const structureAmount = ethers.parseEther(amount.toString());
+        const duration = durationDays * 24 * 60 * 60; // Convert days to seconds
+        
+        const tx = await contract.createStructure(structureAmount, duration, {
+            ...getTxParams(),
+            value: structureAmount
+        });
+        
+        logger.info(index, `TX sent: ${tx.hash}`);
+        const receipt = await tx.wait();
+        
+        if (receipt.status === 1) {
+            logger.success(index, `Structure created! Amount: ${amount} PHRS, Duration: ${durationDays} days`);
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Create structure failed: ${error.message}`);
+    }
+    return false;
+};
 
-async function createStructure(wallet) {
-  const contract = new ethers.Contract(aquaflux, AQUAFLUX_ABI, wallet);
-  const usdcContract = new ethers.Contract(usdc, ERC20_ABI, wallet);
-  
-  try {
-    const balance = await usdcContract.balanceOf(wallet.address);
-    if (balance === 0n) {
-      logger.warn('[Aquaflux] No USDC balance for structure');
-      return null;
+const dissolveStructure = async (walletData, structureId) => {
+    const { index, wallet } = walletData;
+    try {
+        logger.info(index, `Dissolving structure #${structureId}...`);
+        const contract = new ethers.Contract(config.contracts.aquaflux, AQUAFLUX_ABI, wallet);
+        
+        const tx = await contract.dissolveStructure(structureId, getTxParams());
+        logger.info(index, `TX sent: ${tx.hash}`);
+        
+        const receipt = await tx.wait();
+        if (receipt.status === 1) {
+            logger.success(index, `Structure #${structureId} dissolved!`);
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Dissolve structure failed: ${error.message}`);
+    }
+    return false;
+};
+
+const earn = async (walletData, amount) => {
+    const { index, wallet, address } = walletData;
+    try {
+        logger.info(index, `Starting Aquaflux earn with ${amount} PHRS...`);
+        const contract = new ethers.Contract(config.contracts.aquaflux, AQUAFLUX_ABI, wallet);
+        
+        const earnAmount = ethers.parseEther(amount.toString());
+        
+        const tx = await contract.earn(earnAmount, {
+            ...getTxParams(),
+            value: earnAmount
+        });
+        
+        logger.info(index, `TX sent: ${tx.hash}`);
+        const receipt = await tx.wait();
+        
+        if (receipt.status === 1) {
+            logger.success(index, `Earn started with ${amount} PHRS!`);
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Earn failed: ${error.message}`);
+    }
+    return false;
+};
+
+const claimRewards = async (walletData) => {
+    const { index, wallet } = walletData;
+    try {
+        logger.info(index, 'Claiming Aquaflux rewards...');
+        const contract = new ethers.Contract(config.contracts.aquaflux, AQUAFLUX_ABI, wallet);
+        
+        const pending = await contract.pendingRewards(wallet.address);
+        if (pending === 0n) {
+            logger.warning(index, 'No rewards to claim');
+            return false;
+        }
+        
+        const tx = await contract.claimRewards(getTxParams());
+        logger.info(index, `TX sent: ${tx.hash}`);
+        
+        const receipt = await tx.wait();
+        if (receipt.status === 1) {
+            logger.success(index, `Claimed ${ethers.formatEther(pending)} rewards!`);
+            logger.tx(index, tx.hash);
+            return true;
+        }
+    } catch (error) {
+        logger.error(index, `Claim rewards failed: ${error.message}`);
+    }
+    return false;
+};
+
+const runAquaflux = async () => {
+    logger.banner('PHAROS Aquaflux Module');
+    const wallets = loadWallets();
+    
+    if (wallets.length === 0) {
+        console.log('No wallets found.');
+        return;
     }
     
-    const amount = balance / 10n;
-    const duration = randomInt(7, 30) * 86400; // 7-30 days in seconds
+    console.log(`Loaded ${wallets.length} wallet(s)\n`);
     
-    logger.info('[Aquaflux] Approving USDC...');
-    const gasPrice = await getGasPrice();
-    const approveTx = await usdcContract.approve(aquaflux, amount, { gasPrice });
-    await approveTx.wait();
-    
-    logger.info(`[Aquaflux] Creating structure for ${duration / 86400} days...`);
-    const tx = await contract.createStructure(amount, duration, { gasPrice });
-    
-    const receipt = await tx.wait();
-    logger.tx(receipt.hash);
-    logger.success('[Aquaflux] Structure created!');
-    
-    return receipt;
-  } catch (error) {
-    logger.error(`[Aquaflux] Structure failed: ${error.message}`);
-    throw error;
-  }
-}
-
-async function earn(wallet) {
-  const contract = new ethers.Contract(aquaflux, AQUAFLUX_ABI, wallet);
-  const usdcContract = new ethers.Contract(usdc, ERC20_ABI, wallet);
-  
-  try {
-    const balance = await usdcContract.balanceOf(wallet.address);
-    if (balance === 0n) {
-      logger.warn('[Aquaflux] No USDC balance for earning');
-      return null;
+    for (const walletData of wallets) {
+        logger.info(walletData.index, `Address: ${walletData.address}`);
+        
+        // Create structure
+        await createStructure(walletData, 0.001, 7);
+        await randomDelay();
+        
+        // Start earning
+        await earn(walletData, 0.001);
+        await randomDelay();
+        
+        // Claim any available rewards
+        await claimRewards(walletData);
+        await randomDelay();
+        
+        console.log('');
     }
     
-    const amount = balance / 10n;
-    
-    logger.info('[Aquaflux] Approving USDC...');
-    const gasPrice = await getGasPrice();
-    const approveTx = await usdcContract.approve(aquaflux, amount, { gasPrice });
-    await approveTx.wait();
-    
-    logger.info('[Aquaflux] Starting earn...');
-    const tx = await contract.earn(amount, { gasPrice });
-    
-    const receipt = await tx.wait();
-    logger.tx(receipt.hash);
-    logger.success('[Aquaflux] Earn started!');
-    
-    return receipt;
-  } catch (error) {
-    logger.error(`[Aquaflux] Earn failed: ${error.message}`);
-    throw error;
-  }
-}
+    logger.banner('Aquaflux Complete!');
+};
 
-async function run(wallet, action) {
-  switch (action) {
-    case 'structure':
-      return await createStructure(wallet);
-    case 'earn':
-      return await earn(wallet);
-    default:
-      return await createStructure(wallet);
-  }
-}
+module.exports = { createStructure, dissolveStructure, earn, claimRewards, runAquaflux };
 
-module.exports = { run, createStructure, earn };
+if (require.main === module) {
+    runAquaflux().catch(console.error);
+}

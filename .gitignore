@@ -1,27 +1,23 @@
 # Dependencies
 node_modules/
 
-# Private keys - NEVER commit!
-wallets.txt
-
-# Logs
-*.log
-logs/
+# Private keys - NEVER COMMIT!
+privateKeys.txt
 
 # Environment
 .env
 .env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Build
-dist/
-build/
