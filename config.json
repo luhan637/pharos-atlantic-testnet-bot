@@ -1,0 +1,27 @@
+{
+  "rpc": {
+    "url": "https://testnet.dplabs-internal.com",
+    "chainId": 688688
+  },
+  "explorer": "https://testnet.pharosscan.xyz",
+  "contracts": {
+    "onchaingm": "0xbfD69a555F3e3A721B37e824A06ea1B264FC8694",
+    "surflayer": "0x0A7da0b01148b6d5B0f36fCe6A35c46b5A6C12d6",
+    "grandline_nft": "0x32a86dA5e86F62cB804d0BF8eBA5fFb2A4c35A69",
+    "faroswap_router": "0x1a4de519154Ae51200b0ad7c90F7faC75547888a",
+    "faroswap_factory": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "bitverse_router": "0x8C4973C6C26f6E7C2ff21a3F84C1e42884e3Bc30",
+    "aquaflux": "0x62A857C6Ce01859F8f0E8BcA9f4E1EE7b7ECb7D2",
+    "asseto": "0x3A9E7f1D8eF1B3fF0D2B6Ae2CE9f4C8e7E0d1A2B",
+    "zenith_lending": "0x7D5f3fC9b1D2E0f8A3B6C4E5F2A1D8C7B0E9F3A4",
+    "usdc": "0xAD902CF99C2dE2f1Ba5ec4D642Fd7E49cae9EE37",
+    "usdt": "0x4dFA6591bfd71f50f9b61a3F4a2F4E8f6F8E3B0C",
+    "wphrs": "0x76aaDA7EA08bB83410A68f95E5F9e5117BeF0D1d",
+    "phrs_usdc_lp": "0xc32E68c679e6C0d9aB57B8b8e77E8A2e3f92e5C0"
+  },
+  "settings": {
+    "minDelay": 3000,
+    "maxDelay": 8000,
+    "gasMultiplier": 1.2
+  }
+}
