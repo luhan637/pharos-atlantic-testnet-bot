@@ -1,27 +1,242 @@
 {
   "rpc": {
-    "url": "https://testnet.dplabs-internal.com",
-    "chainId": 688688
+    "url": "https://atlantic.dplabs-internal.com",
+    "chainId": 688689,
+    "explorer": "https://atlantic.pharosscan.xyz"
   },
-  "contracts": {
-    "onchaingm": "0x59cfb4d5F0a9A4E05E1dB5e500dB9d84ece30F2B",
-    "surflayer": "0x2d8c0b06dC5A73D5a49F98ceA012f18c536D6Fc7",
-    "grandline": "0x8c47E5E9D65ADee05FA63A87d7949F90d91E1eA2",
-    "faroRouter": "0x1a4de519154ae51200b0ad7c90f7fac75547888a",
-    "faroFactory": "0x5bae6744d9f5a95e17e95b3b32e2b7f8e93a54d6",
-    "bitverse": "0xb86ea3dFC3F1C5C1E3E7dD38B12A27a2b7A9F9c2",
-    "aquaflux": "0x4c7A5F7d4cB3C7a8F9c3B6dE2F1a8bC5E9d6A7f2",
-    "asseto": "0x3d7bA8C9E2f1D4a6B8c3E5F7A9d2C4e6B8a1D3f5",
-    "zenithLending": "0x9c8E3F5a7B2d1C6e4A8f9D3b5C7a2E6F4d8B1a3c",
-    "wphrs": "0x76aaaDA469D23216bE5f7C596fA25F282fF9b364",
-    "usdc": "0xad902cf99c2de2f1ba5ec4d642fd7e49c6389bc3",
-    "usdt": "0xed59de2d7ad9c043442e381231ee3646fc3c2939"
-  },
-  "settings": {
-    "delayMin": 5000,
-    "delayMax": 15000,
+  "gas": {
     "gasLimit": 500000,
     "maxFeePerGas": "1500000000",
-    "maxPriorityFeePerGas": "1500000000"
+    "maxPriorityFeePerGas": "1500000000",
+    "gasMultiplier": 1.2
+  },
+  "txRetry": {
+    "maxRetries": 3,
+    "retryDelay": 5000,
+    "timeoutMs": 60000
+  },
+  "transfer": {
+    "minAmount": "0.0001",
+    "maxAmount": "0.001",
+    "enabled": true
+  },
+  "delay": {
+    "min": 5000,
+    "max": 15000,
+    "betweenTasks": 3000
+  },
+  "dailyTasks": {
+    "onchainGM": {
+      "enabled": true,
+      "contract": "0x59cfb4d5F0a9A4E05E1dB5e500dB9d84ece30F2B",
+      "method": "checkIn"
+    },
+    "surflayer": {
+      "enabled": true,
+      "contract": "0x2d8c0b06DC5A73D5a49F98ceA012f18c536D6Fc7",
+      "method": "surf"
+    },
+    "grandlineBadges": {
+      "enabled": true,
+      "contract": "0x8c47E5E9D65ADee05FA63A87d7949F90d91E1eA2",
+      "method": "claimBadge"
+    }
+  },
+  "pharosApi": {
+    "baseUrl": "https://api.pharos.sh",
+    "endpoints": {
+      "faucet": "/faucet/claim",
+      "balance": "/account/balance",
+      "nonce": "/account/nonce",
+      "tasks": "/tasks/daily"
+    },
+    "timeout": 30000
+  },
+  "grandlineNFT": {
+    "enabled": true,
+    "contract": "0x8c47E5E9D65ADee05FA63A87d7949F90d91E1eA2",
+    "mintPrice": "0",
+    "maxMintPerWallet": 5,
+    "badges": {
+      "explorer": 1,
+      "pioneer": 2,
+      "navigator": 3,
+      "captain": 4,
+      "admiral": 5
+    }
+  },
+  "faroSwap": {
+    "enabled": true,
+    "router": "0x1a4de519154ae51200b0ad7c90f7fac75547888a",
+    "factory": "0x5bae6744d9f5a95e17e95b3b32e2b7f8e93a54d6",
+    "wphrs": "0x76aaADA469D23216bE5f7C596fA25F282fF9b364",
+    "slippage": 0.5,
+    "deadline": 1200,
+    "tokens": {
+      "PHRS": {
+        "address": "0x0000000000000000000000000000000000000000",
+        "decimals": 18,
+        "symbol": "PHRS"
+      },
+      "WPHRS": {
+        "address": "0x76aaADA469D23216bE5f7C596fA25F282fF9b364",
+        "decimals": 18,
+        "symbol": "WPHRS"
+      },
+      "USDC": {
+        "address": "0xad902cf99c2de2f1ba5ec4d642fd7e49c6389bc3",
+        "decimals": 6,
+        "symbol": "USDC"
+      },
+      "USDT": {
+        "address": "0xed59de2d7ad9c043442e381231ee3646fc3c2939",
+        "decimals": 6,
+        "symbol": "USDT"
+      },
+      "WETH": {
+        "address": "0x5c9d1430b638e527c5e4e9e5b8b8f1f5e7e5e5e5",
+        "decimals": 18,
+        "symbol": "WETH"
+      },
+      "WBTC": {
+        "address": "0x6d9d1430b638e527c5e4e9e5b8b8f1f5e7e5e5e6",
+        "decimals": 8,
+        "symbol": "WBTC"
+      }
+    },
+    "liquidityPairs": [
+      {
+        "tokenA": "PHRS",
+        "tokenB": "USDC",
+        "fee": 3000
+      },
+      {
+        "tokenA": "PHRS",
+        "tokenB": "USDT",
+        "fee": 3000
+      },
+      {
+        "tokenA": "USDC",
+        "tokenB": "USDT",
+        "fee": 500
+      },
+      {
+        "tokenA": "WPHRS",
+        "tokenB": "WETH",
+        "fee": 3000
+      },
+      {
+        "tokenA": "WPHRS",
+        "tokenB": "WBTC",
+        "fee": 3000
+      }
+    ]
+  },
+  "bitverse": {
+    "enabled": true,
+    "contract": "0xb86ea3dFC3F1C5C1E3E7dD38B12A27a2b7A9F9c2",
+    "methods": {
+      "mint": "mint",
+      "stake": "stake",
+      "unstake": "unstake",
+      "claim": "claimRewards"
+    },
+    "stakingDuration": 86400,
+    "rewardRate": "0.01"
+  },
+  "aquaflux": {
+    "enabled": true,
+    "contract": "0x4c7A5F7d4cB3C7a8F9c3B6dE2F1a8bC5E9d6A7f2",
+    "assets": {
+      "PHRS": {
+        "address": "0x0000000000000000000000000000000000000000",
+        "decimals": 18,
+        "symbol": "PHRS",
+        "collateralFactor": 0.75
+      },
+      "USDC": {
+        "address": "0xad902cf99c2de2f1ba5ec4d642fd7e49c6389bc3",
+        "decimals": 6,
+        "symbol": "USDC",
+        "collateralFactor": 0.85
+      },
+      "USDT": {
+        "address": "0xed59de2d7ad9c043442e381231ee3646fc3c2939",
+        "decimals": 6,
+        "symbol": "USDT",
+        "collateralFactor": 0.85
+      }
+    },
+    "w_assets": {
+      "wPHRS": {
+        "address": "0x76aaADA469D23216bE5f7C596fA25F282fF9b364",
+        "underlying": "PHRS",
+        "decimals": 18
+      },
+      "wUSDC": {
+        "address": "0xaF902cf99c2de2f1ba5ec4d642fd7e49c6389bc4",
+        "underlying": "USDC",
+        "decimals": 6
+      },
+      "wUSDT": {
+        "address": "0xeF59de2d7ad9c043442e381231ee3646fc3c293a",
+        "underlying": "USDT",
+        "decimals": 6
+      }
+    },
+    "methods": {
+      "deposit": "deposit",
+      "withdraw": "withdraw",
+      "borrow": "borrow",
+      "repay": "repay"
+    }
+  },
+  "zenithLending": {
+    "enabled": true,
+    "contract": "0x9c8E3F5a7B2d1C6e4A8f9D3b5C7a2E6F4d8B1a3c",
+    "poolAddress": "0x9c8E3F5a7B2d1C6e4A8f9D3b5C7a2E6F4d8B1a3c",
+    "supportedAssets": [
+      "PHRS",
+      "USDC",
+      "USDT",
+      "WETH"
+    ],
+    "methods": {
+      "supply": "supply",
+      "withdraw": "withdraw",
+      "borrow": "borrow",
+      "repay": "repay",
+      "liquidate": "liquidate"
+    },
+    "liquidationThreshold": 0.8,
+    "interestRateModel": "variable"
+  },
+  "asseto": {
+    "enabled": true,
+    "contract": "0x3d7bA8C9E2f1D4a6B8c3E5F7A9d2C4e6B8a1D3f5",
+    "tokenizer": "0x3d7bA8C9E2f1D4a6B8c3E5F7A9d2C4e6B8a1D3f5",
+    "assetTypes": [
+      "real_estate",
+      "commodities",
+      "securities"
+    ],
+    "methods": {
+      "tokenize": "tokenizeAsset",
+      "transfer": "transferAsset",
+      "redeem": "redeemAsset",
+      "verify": "verifyOwnership"
+    },
+    "feePercentage": 0.1
+  },
+  "wallets": {
+    "source": "wallets.txt",
+    "format": "privateKey",
+    "delimiter": "\n"
+  },
+  "logging": {
+    "level": "info",
+    "file": "logs/bot.log",
+    "console": true,
+    "timestamp": true
   }
 }
